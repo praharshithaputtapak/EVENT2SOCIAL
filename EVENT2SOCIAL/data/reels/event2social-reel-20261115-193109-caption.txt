@@ -1,0 +1,24 @@
+Platform: Instagram Reels
+Format: 9:16 vertical MP4
+Cover title: IoT STEAM Workshop Highlights
+Closing card: Thanks for joining us!
+
+Script:
+1. Opening shot of the college façade with overlay title.\n2. Cut to the computer lab: instructor in a blue sari introduces Arduino basics.\n3. Close‑up of students building circuits on their desks, hands on IoT kits.\n4. Quick pan of the slide showing "What is Arduino?" with the ATMEGA328P diagram.\n5. Group shot of participants discussing ideas, smiling.\n6. Closing card with thank‑you text and organizer logos.
+
+Scene overlays:
+Scene 1: IoT STEAM Workshop
+Scene 2: Oct 23‑24, 2026
+Scene 3: R.B.V.R.R. Women's College
+Scene 4: Arduino Basics
+Scene 5: Hands‑on Learning
+Scene 6: Thank You!
+
+Caption:
+Our 2‑Day Hands‑on Workshop on IoT‑Enabled STEAM Innovation brought together curious minds at R.B.V.R.R. Women's College, Hyderabad (Oct 23‑24, 2026). 🎓💡 Thanks to the Department of Computer Science, the Skill & Interdisciplinary Courses Committee, and Sumskruta Vahini Foundation for making it happen! #IoT #STEAM #Innovation
+
+Hashtags:
+#IoT #STEAM #Workshop #Hyderabad #WomenInTech #Innovation
+
+Call to action:
+Tap to watch the full recap and follow us for more tech events!

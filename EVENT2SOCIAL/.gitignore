@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.streamlit/secrets.toml
+.env
+data/*.db
+data/uploads/
+
+# Local HTTPS certificate and private key
+.streamlit/certs/
+
+data/video_previews/
+
+.venv-1/
