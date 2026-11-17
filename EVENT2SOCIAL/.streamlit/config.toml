@@ -11,5 +11,3 @@ headless = true
 port = 8509
 
 address = "0.0.0.0"
-sslCertFile = ".streamlit/certs/server-cert.pem"
-sslKeyFile = ".streamlit/certs/server-key.pem"
