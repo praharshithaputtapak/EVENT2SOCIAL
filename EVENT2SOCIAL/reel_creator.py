@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import os
+import logging
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import threading
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def _ffmpeg_path() -> str:
@@ -187,6 +190,8 @@ def create_vertical_video(segments: list[dict[str, Any]], output_path: str | Pat
                 process.stdout.close()
         if return_code != 0 or not output.is_file() or output.stat().st_size == 0:
             detail = "\n".join(diagnostics) or "FFmpeg did not create an output file."
+            logger.error("FFmpeg Reel composition failed (exit code %s). Captured FFmpeg output:\n%s",
+                         return_code, detail)
             raise RuntimeError(f"FFmpeg could not compose the Reel: {detail[-1200:]}")
 
     cover = output.with_name(output.stem + "-cover.jpg")
@@ -194,7 +199,10 @@ def create_vertical_video(segments: list[dict[str, Any]], output_path: str | Pat
         "-ss", "0", "-i", str(output), "-frames:v", "1", "-q:v", "2", str(cover)],
         capture_output=True, text=True, timeout=60)
     if cover_result.returncode != 0 or not cover.is_file():
-        raise RuntimeError(f"Reel exported, but cover extraction failed: {(cover_result.stderr or '').strip()[-500:]}")
+        cover_error = (cover_result.stderr or "Cover image was not created.").strip()
+        logger.error("FFmpeg Reel cover extraction failed (exit code %s):\n%s",
+                     cover_result.returncode, cover_error)
+        raise RuntimeError(f"Reel exported, but cover extraction failed: {cover_error[-500:]}")
     if cover_text.strip():
         from PIL import Image, ImageDraw, ImageFont
         with Image.open(cover) as source:
