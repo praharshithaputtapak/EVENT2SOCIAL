@@ -1792,15 +1792,19 @@ def show_reel_creator() -> None:
         return
     st.caption(f"Selected {len(selected)} of {len(assets)} available source(s); order shown above is the scene order.")
     script_key, caption_key, cover_key, closing_key = "reel_script", "reel_caption", "reel_cover_text", "reel_closing_text"
+    def reel_text(value: object, fallback: str = "") -> str:
+        """Keep text-area and text-input state valid even after malformed AI JSON."""
+        return value if isinstance(value, str) else fallback
+
     overlay_keys = [f"reel_overlay_{hashlib.sha1(key.encode()).hexdigest()[:12]}" for key in selected]
     pending = st.session_state.pop("reel_copy_pending", None)
     if pending:
-        st.session_state[script_key] = pending.get("script", "")
-        st.session_state[caption_key] = pending.get("caption", "")
-        st.session_state[cover_key] = pending.get("cover_text", "")
-        st.session_state[closing_key] = pending.get("closing_text", "Thank you for joining us")
+        st.session_state[script_key] = reel_text(pending.get("script"))
+        st.session_state[caption_key] = reel_text(pending.get("caption"))
+        st.session_state[cover_key] = reel_text(pending.get("cover_text"))
+        st.session_state[closing_key] = reel_text(pending.get("closing_text"), "Thank you for joining us")
         for key, value in zip(overlay_keys, pending.get("scene_overlays", [])):
-            st.session_state[key] = value
+            st.session_state[key] = reel_text(value)
         st.session_state["reel_hashtags"] = " ".join("#" + str(tag).lstrip("#") for tag in pending.get("hashtags", []))
         st.session_state["reel_cta"] = pending.get("call_to_action", "")
     if script_key not in st.session_state:
@@ -1811,6 +1815,11 @@ def show_reel_creator() -> None:
         st.session_state[cover_key] = str(event.get("name", "Event Highlights"))[:70]
     if closing_key not in st.session_state:
         st.session_state[closing_key] = "Thank you for joining us"
+    # Session state can outlive a rerun (and AI providers may return valid JSON
+    # with values of the wrong shape). Streamlit text widgets require strings.
+    for key in (script_key, caption_key, cover_key, closing_key, "reel_hashtags", "reel_cta", *overlay_keys):
+        if key in st.session_state and not isinstance(st.session_state[key], str):
+            st.session_state[key] = ""
     ai_col, progress_col = st.columns([1, 2])
     if ai_col.button("Generate script, captions and scene text with AI", key="reel_generate_copy", disabled=not bool(GEN_KEY)):
         selected_notes = []
