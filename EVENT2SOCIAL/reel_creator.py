@@ -77,19 +77,20 @@ def _build_filter_graph(durations: list[float], width: int, height: int,
         overlay_label = f"o{index}"
         filters.append(
             f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},fps=30,format=yuv420p,setsar=1,"
-            f"trim=duration={duration},settb=AVTB,setpts=PTS-STARTPTS[{source_label}]"
+            f"crop={width}:{height},trim=duration={duration},settb=AVTB,"
+            f"setpts=PTS-STARTPTS,format=yuv420p,setsar=1,fps=30[{source_label}]"
         )
         filters.append(
-            f"[{segment_count + index}:v]fps=30,format=rgba,setsar=1,"
-            f"trim=duration={duration},settb=AVTB,setpts=PTS-STARTPTS[{overlay_label}]"
+            f"[{segment_count + index}:v]trim=duration={duration},settb=AVTB,"
+            f"setpts=PTS-STARTPTS,format=rgba,setsar=1,fps=30[{overlay_label}]"
         )
-        # Normalize again after overlay: overlay/framesync can change link rate
-        # metadata. This is the final input consumed by xfade or concat.
+        # Reset timestamps and time base before the final fps filter. In
+        # FFmpeg 7.1, setpts clears frame-rate metadata, so no setpts may follow
+        # this fps on a path that feeds xfade.
         filters.append(
             f"[{source_label}][{overlay_label}]overlay=0:0:shortest=1,"
-            f"trim=duration={duration},fps=30,scale={width}:{height},crop={width}:{height},"
-            f"format=yuv420p,setsar=1,settb=AVTB,setpts=PTS-STARTPTS[v{index}]"
+            f"trim=duration={duration},settb=AVTB,setpts=PTS-STARTPTS,"
+            f"scale={width}:{height},crop={width}:{height},format=yuv420p,setsar=1,fps=30[v{index}]"
         )
 
     current = "v0"
@@ -108,8 +109,8 @@ def _build_filter_graph(durations: list[float], width: int, height: int,
         # Normalize composites too, since they become the first input to the
         # next xfade in a multi-scene Reel.
         filters.append(
-            f"[{raw_label}]fps=30,scale={width}:{height},crop={width}:{height},"
-            f"format=yuv420p,setsar=1,settb=AVTB,setpts=PTS-STARTPTS[{output_label}]"
+            f"[{raw_label}]scale={width}:{height},crop={width}:{height},"
+            f"format=yuv420p,setsar=1,settb=AVTB,setpts=PTS-STARTPTS,fps=30[{output_label}]"
         )
         elapsed += durations[index]
         current = output_label
