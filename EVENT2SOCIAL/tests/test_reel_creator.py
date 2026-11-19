@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -52,6 +53,20 @@ class ReelCreatorTests(unittest.TestCase):
         command = captured["command"]
         graph = command[command.index("-filter_complex") + 1]
         nodes = graph.split(";")
+        producers = {match.group(1): node for node in nodes
+                     if (match := re.search(r"\[([^\]]+)\]$", node))}
+
+        def filters_before_output(label):
+            expression = re.sub(r"\[[^\]]+\]$", "", producers[label])
+            expression = re.sub(r"^\[[^\]]+\]", "", expression)
+            return expression.split(",")
+
+        def assert_cfr_xfade_input(label):
+            stream_filters = filters_before_output(label)
+            self.assertIn("settb=AVTB", stream_filters)
+            self.assertIn("setpts=PTS-STARTPTS", stream_filters)
+            self.assertEqual(stream_filters[-1], "fps=30")
+
         expected_width, expected_height = map(int, expected_resolution.split("x"))
         scene_count = (len(segments) + bool(kwargs.get("opening_title"))
                        + bool(kwargs.get("closing_text")))
@@ -61,14 +76,22 @@ class ReelCreatorTests(unittest.TestCase):
                 self.assertIn("fps=30", node)
                 self.assertIn("settb=AVTB", node)
                 self.assertIn("setpts=PTS-STARTPTS", node)
+                self.assertLess(node.index("settb=AVTB"), node.index("setpts=PTS-STARTPTS"))
+                self.assertLess(node.index("setpts=PTS-STARTPTS"), node.rindex("fps=30"))
             scene_node = next(node for node in nodes if node.endswith(f"[v{index}]"))
             self.assertIn("format=yuv420p", scene_node)
             self.assertIn(f"scale={expected_width}:{expected_height}", scene_node)
+            assert_cfr_xfade_input(f"v{index}")
         xfade_nodes = [node for node in nodes if "xfade=" in node]
         self.assertEqual(len(xfade_nodes), scene_count - 1)
         for index, node in enumerate(xfade_nodes, start=1):
             self.assertIn(f"[v{index}]", node)
-            self.assertIn(f"[{'v0' if index == 1 else f'x{index - 1}'}]", node)
+            first_input = "v0" if index == 1 else f"x{index - 1}"
+            self.assertIn(f"[{first_input}]", node)
+            assert_cfr_xfade_input(first_input)
+            assert_cfr_xfade_input(f"v{index}")
+            if index < scene_count - 1:
+                assert_cfr_xfade_input(f"x{index}")
         self.assertTrue(video.is_file() and video.stat().st_size > 1000)
         self.assertTrue(cover.is_file() and cover.stat().st_size > 1000)
         self.assertTrue(progress)
