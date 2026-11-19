@@ -67,6 +67,55 @@ def _probe_media(ffprobe: str | None, path: Path) -> dict[str, Any] | None:
         return None
 
 
+def _build_filter_graph(durations: list[float], width: int, height: int,
+                        fade: float) -> tuple[str, str]:
+    """Build scene and transition filters with normalized xfade inputs."""
+    segment_count = len(durations)
+    filters = []
+    for index, duration in enumerate(durations):
+        source_label = f"s{index}"
+        overlay_label = f"o{index}"
+        filters.append(
+            f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},fps=30,format=yuv420p,setsar=1,"
+            f"trim=duration={duration},settb=AVTB,setpts=PTS-STARTPTS[{source_label}]"
+        )
+        filters.append(
+            f"[{segment_count + index}:v]fps=30,format=rgba,setsar=1,"
+            f"trim=duration={duration},settb=AVTB,setpts=PTS-STARTPTS[{overlay_label}]"
+        )
+        # Normalize again after overlay: overlay/framesync can change link rate
+        # metadata. This is the final input consumed by xfade or concat.
+        filters.append(
+            f"[{source_label}][{overlay_label}]overlay=0:0:shortest=1,"
+            f"trim=duration={duration},fps=30,scale={width}:{height},crop={width}:{height},"
+            f"format=yuv420p,setsar=1,settb=AVTB,setpts=PTS-STARTPTS[v{index}]"
+        )
+
+    current = "v0"
+    elapsed = durations[0]
+    for index in range(1, segment_count):
+        raw_label = f"xraw{index}"
+        output_label = f"x{index}"
+        if fade > 0:
+            offset = max(elapsed - fade * index, 0)
+            filters.append(
+                f"[{current}][v{index}]xfade=transition=fade:duration={fade}:"
+                f"offset={offset}[{raw_label}]"
+            )
+        else:
+            filters.append(f"[{current}][v{index}]concat=n=2:v=1:a=0[{raw_label}]")
+        # Normalize composites too, since they become the first input to the
+        # next xfade in a multi-scene Reel.
+        filters.append(
+            f"[{raw_label}]fps=30,scale={width}:{height},crop={width}:{height},"
+            f"format=yuv420p,setsar=1,settb=AVTB,setpts=PTS-STARTPTS[{output_label}]"
+        )
+        elapsed += durations[index]
+        current = output_label
+    return ";".join(filters), current
+
+
 def _make_overlay(path: Path, text: str, width: int, height: int) -> None:
     from PIL import Image, ImageDraw, ImageFont
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -207,30 +256,11 @@ def create_vertical_video(segments: list[dict[str, Any]], output_path: str | Pat
             overlay_files.append(overlay_file)
             command.extend(["-loop", "1", "-framerate", "30", "-t", str(durations[index]), "-i", str(overlay_file)])
 
-        filters = []
-        for index, (item, duration) in enumerate(zip(segments, durations)):
-            source_label = f"s{index}"
-            chain = (f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-                     f"crop={width}:{height},fps=30,setsar=1,trim=duration={duration},settb=AVTB,setpts=PTS-STARTPTS[{source_label}];"
-                     f"[{source_label}][{len(segments)+index}:v]overlay=0:0:shortest=1,format=yuv420p,"
-                     f"trim=duration={duration},settb=AVTB,setpts=PTS-STARTPTS[v{index}]")
-            filters.append(chain)
-
-        current = "v0"
-        elapsed = durations[0]
-        for index in range(1, len(segments)):
-            out_label = f"x{index}"
-            if fade > 0:
-                offset = max(elapsed - fade * index, 0)
-                filters.append(f"[{current}][v{index}]xfade=transition=fade:duration={fade}:offset={offset}[{out_label}]")
-            else:
-                filters.append(f"[{current}][v{index}]concat=n=2:v=1:a=0[{out_label}]")
-            elapsed += durations[index]
-            current = out_label
+        filter_graph, current = _build_filter_graph(durations, width, height, fade)
         total_duration = sum(durations) - fade * max(0, len(segments) - 1)
         temp_output = temp / "render.mp4"
         temp_cover = temp / "render-cover.jpg"
-        command.extend(["-filter_complex", ";".join(filters), "-map", f"[{current}]", "-an",
+        command.extend(["-filter_complex", filter_graph, "-map", f"[{current}]", "-an",
                         "-t", str(total_duration), "-c:v", "libx264", "-preset", "veryfast",
                         "-crf", "21", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                         *(["-threads:v", "1"] if render_profile == "cloud" else []),
