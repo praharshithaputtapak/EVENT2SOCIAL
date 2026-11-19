@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import io
 import hashlib
@@ -40,6 +41,8 @@ from storage import (get_campaign, list_campaigns, list_documents, load_chunks,
                      PDF_IMAGE_DIR, get_pdf_image_extraction,
                      list_extracted_pdf_images, get_extracted_pdf_image,
                      save_post_package)
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="EVENT2SOCIAL", page_icon="✳️", layout="wide")
 
@@ -1864,7 +1867,7 @@ def show_reel_creator() -> None:
     st.info("Export uses 9:16 vertical H.264 MP4 with fade transitions and text overlays. Original clip audio is omitted; add licensed platform audio after download. No new AI-generated footage is created.")
     if st.button("Render Reel / Short MP4", type="primary", key="reel_render", disabled=not bool(selected)):
         output_dir = DATA_DIR / "reels"
-        output_path = output_dir / f"event2social-reel-{datetime.now().strftime('%Y%m%d-%H%M%S')}.mp4"
+        output_path = output_dir / f"event2social-reel-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.mp4"
         segments = [{"path": assets[key]["path"], "kind": assets[key]["kind"], "duration": duration} for key in selected]
         try:
             progress = st.progress(0, text="Rendering vertical video with FFmpeg…")
@@ -1886,7 +1889,9 @@ def show_reel_creator() -> None:
                 "caption": str(caption_path), "platform": platform}
             st.success("Vertical video, cover image and caption file created locally.")
         except Exception as exc:
-            st.error(f"Could not render the Reel: {exc}")
+            logger.exception("Reel rendering failed for output %s", output_path)
+            detail = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+            st.error(f"Could not render the Reel. {detail[:240]} See server logs for full details.")
         finally:
             if "progress" in locals():
                 progress.empty()
